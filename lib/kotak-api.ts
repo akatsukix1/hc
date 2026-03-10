@@ -115,21 +115,26 @@ function getHeaders(session: KotakSession) {
 }
 
 export async function fetchScripPaths(creds: KotakCredentials, session: KotakSession): Promise<string[]> {
-  try {
-    const res = await fetch(`${session.baseUrl}/script-details/1.0/masterscrip/file-paths`, {
-      headers: quoteHeaders(creds),
-    });
-    const data = await res.json();
-    const paths =
-      data?.data?.filesPaths ||
-      data?.data?.filePaths ||
-      data?.data?.files ||
-      (Array.isArray(data?.data) ? data.data : null) ||
-      data?.filesPaths ||
-      data?.filePaths ||
-      [];
-    if (Array.isArray(paths) && paths.length > 0) return paths;
-  } catch {}
+  const endpoints = [
+    `${session.baseUrl}/Files/1.0/masterscrip/file-paths`,
+    `${FALLBACK_BASE}/Files/1.0/masterscrip/file-paths`,
+    `${session.baseUrl}/script-details/1.0/masterscrip/file-paths`,
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { headers: quoteHeaders(creds) });
+      const data = await res.json();
+      const paths =
+        data?.data?.filesPaths ||
+        data?.data?.filePaths ||
+        data?.data?.files ||
+        (Array.isArray(data?.data) ? data.data : null) ||
+        data?.filesPaths ||
+        data?.filePaths ||
+        [];
+      if (Array.isArray(paths) && paths.length > 0) return paths;
+    } catch {}
+  }
   return Object.values(HARDCODED_CSV_URLS);
 }
 

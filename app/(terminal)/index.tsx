@@ -37,6 +37,7 @@ export default function ChainScreen() {
     spotPrices, expiries, selectedExpiry, setSelectedExpiry,
     numStrikes, setNumStrikes,
     chain, chainLoading, refreshChain,
+    instrumentsLoaded, instrumentsLoading, reloadInstruments,
     placeTradeOrder,
     session,
   } = useKotak();
@@ -149,10 +150,27 @@ export default function ChainScreen() {
           <ActivityIndicator color={Colors.green} size="large" />
           <Text style={styles.loadingText}>Building options chain...</Text>
         </View>
+      ) : !instrumentsLoaded ? (
+        <View style={styles.loadingBox}>
+          <Feather name="download" size={40} color={Colors.border2} />
+          <Text style={styles.emptyText}>Instruments not loaded</Text>
+          <Text style={styles.emptySubText}>CSV download failed on login</Text>
+          <Pressable
+            style={[styles.retryBtn, instrumentsLoading && { opacity: 0.5 }]}
+            onPress={reloadInstruments}
+            disabled={instrumentsLoading}
+          >
+            {instrumentsLoading
+              ? <ActivityIndicator color={Colors.bg} size="small" />
+              : <Text style={styles.retryBtnText}>Download Instruments</Text>
+            }
+          </Pressable>
+        </View>
       ) : !chain || !chain.chain.length ? (
         <View style={styles.loadingBox}>
           <Feather name="bar-chart-2" size={40} color={Colors.border2} />
           <Text style={styles.emptyText}>No chain data</Text>
+          <Text style={styles.emptySubText}>Tap refresh to retry</Text>
         </View>
       ) : (
         <FlatList
@@ -448,7 +466,18 @@ const styles = StyleSheet.create({
   },
   loadingBox: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14 },
   loadingText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textMuted },
+  emptyText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textMuted },
+  emptySubText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textMuted, marginTop: 4 },
+  retryBtn: {
+    marginTop: 16,
+    backgroundColor: Colors.blue,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+    minWidth: 180,
+    alignItems: "center",
+  },
+  retryBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.bg },
   chainRow: {
     flexDirection: "row",
     alignItems: "center",

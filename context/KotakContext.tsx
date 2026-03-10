@@ -48,6 +48,9 @@ interface KotakContextValue {
   chain: ChainResult | null;
   chainLoading: boolean;
   refreshChain: () => Promise<void>;
+  instrumentsLoaded: boolean;
+  instrumentsLoading: boolean;
+  reloadInstruments: () => Promise<void>;
 
   positions: any[];
   posLoading: boolean;
@@ -84,6 +87,7 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
   const [loadingMessage, setLoadingMessage] = useState("Loading...");
 
   const [optionsDb, setOptionsDb] = useState<OptionsDb>({});
+  const [instrumentsLoading, setInstrumentsLoading] = useState(false);
   const [currentIndex, setCurrentIndex] = useState("NIFTY");
   const [spotPrices, setSpotPrices] = useState<Record<string, number>>({});
   const [expiries, setExpiries] = useState<ExpiryInfo[]>([]);
@@ -151,6 +155,20 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
     setLoadingMessage("");
     return { status: "success" as const };
   }, [credentials]);
+
+  const reloadInstruments = useCallback(async () => {
+    if (!session || !credentials) return;
+    setInstrumentsLoading(true);
+    try {
+      const db = await downloadAndBuildOptionsDb(
+        credentials, session,
+        ["NIFTY", "BANKNIFTY", "SENSEX"],
+        () => {}
+      );
+      setOptionsDb(db);
+    } catch {}
+    setInstrumentsLoading(false);
+  }, [session, credentials]);
 
   const disconnect = useCallback(() => {
     setSession(null);
@@ -341,6 +359,8 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
       saveCredentials, clearCredentials, connectWithTotp, disconnect,
       currentIndex, setCurrentIndex, spotPrices, expiries, selectedExpiry,
       setSelectedExpiry, numStrikes, setNumStrikes, chain, chainLoading, refreshChain,
+      instrumentsLoaded: Object.keys(optionsDb).some((k) => Object.keys(optionsDb[k]).length > 0),
+      instrumentsLoading, reloadInstruments,
       positions, posLoading, liveLtps, refreshPositions,
       orders, ordersLoading, refreshOrders,
       funds, fundsLoading, refreshFunds,
