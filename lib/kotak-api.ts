@@ -146,7 +146,6 @@ export async function getSpotPrice(
     NIFTY: ["nse_cm", "Nifty 50"],
     BANKNIFTY: ["nse_cm", "Nifty Bank"],
     SENSEX: ["bse_cm", "SENSEX"],
-    FINNIFTY: ["nse_cm", "Nifty Fin Service"],
   };
   const [seg, sym] = map[index.toUpperCase()] || ["nse_cm", "Nifty 50"];
   const q = await fetchQuote(creds, session, seg, sym);

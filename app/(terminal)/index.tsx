@@ -11,7 +11,7 @@ import Colors from "@/constants/colors";
 import { useKotak } from "@/context/KotakContext";
 import type { ChainRow } from "@/lib/options-engine";
 
-const INDICES = ["NIFTY", "BANKNIFTY", "SENSEX", "FINNIFTY"];
+const INDICES = ["NIFTY", "BANKNIFTY", "SENSEX"];
 
 function fmtPrice(v: number): string {
   if (!v) return "—";
@@ -318,7 +318,9 @@ function ChainRowItem({
     <View style={[styles.chainRow, isAtm && styles.chainRowAtm]}>
       {/* CE side */}
       <View style={styles.ceSide}>
-        <Text style={[styles.cePrice, !item.ce_ts && styles.priceEmpty]}>—</Text>
+        <Text style={[styles.cePrice, !item.ce_ltp && styles.priceEmpty]}>
+          {fmtPrice(item.ce_ltp)}
+        </Text>
         {item.ce_ts ? (
           <View style={styles.sideBtns}>
             <TouchableOpacity style={styles.buyBtn} onPress={() => onPressCe("B")} activeOpacity={0.7}>
@@ -351,7 +353,9 @@ function ChainRowItem({
             </TouchableOpacity>
           </View>
         ) : <View style={styles.sideBtnsPlaceholder} />}
-        <Text style={[styles.pePrice, !item.pe_ts && styles.priceEmpty]}>—</Text>
+        <Text style={[styles.pePrice, !item.pe_ltp && styles.priceEmpty]}>
+          {fmtPrice(item.pe_ltp)}
+        </Text>
       </View>
     </View>
   );

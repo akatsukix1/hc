@@ -112,10 +112,12 @@ export interface ChainRow {
   ce_symbol: string;
   ce_seg: string;
   ce_lot: number;
+  ce_ltp: number;
   pe_ts: string;
   pe_symbol: string;
   pe_seg: string;
   pe_lot: number;
+  pe_ltp: number;
 }
 
 export interface ChainResult {
@@ -232,7 +234,7 @@ export function queryChain(
   if (!strikesData) return null;
   const allStrikes = Object.keys(strikesData).map(Number).sort((a, b) => a - b);
   if (!allStrikes.length) return null;
-  const stepMap: Record<string, number> = { NIFTY: 50, BANKNIFTY: 100, SENSEX: 100, FINNIFTY: 50 };
+  const stepMap: Record<string, number> = { NIFTY: 50, BANKNIFTY: 100, SENSEX: 100 };
   const step = stepMap[key] || 50;
   const atm = allStrikes.reduce((prev, curr) =>
     Math.abs(curr - spotPrice) < Math.abs(prev - spotPrice) ? curr : prev
@@ -254,10 +256,12 @@ export function queryChain(
       ce_symbol: ce?.symbol || "",
       ce_seg: ce?.seg || "",
       ce_lot: ce?.lot || 1,
+      ce_ltp: 0,
       pe_ts: pe?.ts || "",
       pe_symbol: pe?.symbol || "",
       pe_seg: pe?.seg || "",
       pe_lot: pe?.lot || 1,
+      pe_ltp: 0,
     };
   });
   return { atmStrike: atm, spotPrice, chain, index: key, expiry: expiryLabel, lotSize, step };

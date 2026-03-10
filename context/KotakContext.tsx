@@ -143,7 +143,7 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
     try {
       const db = await downloadAndBuildOptionsDb(
         credentials, newSession,
-        ["NIFTY", "BANKNIFTY", "SENSEX", "FINNIFTY"],
+        ["NIFTY", "BANKNIFTY", "SENSEX"],
         (msg) => setLoadingMessage(msg)
       );
       setOptionsDb(db);
@@ -183,7 +183,22 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
       const expiry = selectedExpiry || expiries[0]?.label || "";
       if (!expiry) { setChainLoading(false); return; }
       const result = queryChain(optionsDb, currentIndex, spot || spotPrices[currentIndex] || 0, numStrikes, expiry);
-      setChain(result);
+      if (result && result.chain.length > 0) {
+        const tokens: Array<{ seg: string; sym: string; tok: string }> = [];
+        for (const row of result.chain) {
+          if (row.ce_ts) tokens.push({ seg: row.ce_seg, sym: row.ce_ts, tok: "" });
+          if (row.pe_ts) tokens.push({ seg: row.pe_seg, sym: row.pe_ts, tok: "" });
+        }
+        const ltps = await fetchLtps(credentials, session, tokens);
+        const chainWithLtps = result.chain.map((row) => ({
+          ...row,
+          ce_ltp: ltps[row.ce_ts] || 0,
+          pe_ltp: ltps[row.pe_ts] || 0,
+        }));
+        setChain({ ...result, chain: chainWithLtps });
+      } else {
+        setChain(result);
+      }
     } catch {}
     setChainLoading(false);
   }, [session, credentials, currentIndex, selectedExpiry, expiries, optionsDb, numStrikes, spotPrices]);
@@ -198,7 +213,7 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
     if (spotIntervalRef.current) clearInterval(spotIntervalRef.current);
     spotIntervalRef.current = setInterval(async () => {
       if (!credentials || !session) return;
-      for (const idx of ["NIFTY", "BANKNIFTY", "SENSEX", "FINNIFTY"]) {
+      for (const idx of ["NIFTY", "BANKNIFTY", "SENSEX"]) {
         try {
           const p = await getSpotPrice(credentials, session, idx);
           if (p > 0) setSpotPrices((prev) => ({ ...prev, [idx]: p }));
@@ -216,7 +231,23 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
       const spot = spotPrices[currentIndex];
       if (!spot) return;
       const result = queryChain(optionsDb, currentIndex, spot, numStrikes, exp);
-      if (result) setChain(result);
+      if (result) {
+        setChain((prev) => {
+          const ltpMap: Record<string, number> = {};
+          if (prev) {
+            for (const row of prev.chain) {
+              if (row.ce_ts) ltpMap[row.ce_ts] = row.ce_ltp;
+              if (row.pe_ts) ltpMap[row.pe_ts] = row.pe_ltp;
+            }
+          }
+          const chainWithLtps = result.chain.map((row) => ({
+            ...row,
+            ce_ltp: ltpMap[row.ce_ts] || 0,
+            pe_ltp: ltpMap[row.pe_ts] || 0,
+          }));
+          return { ...result, chain: chainWithLtps };
+        });
+      }
     };
     update();
   }, [spotPrices, currentIndex]);
@@ -292,13 +323,15 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
     setFundsLoading(true);
     try {
       const data = await getLimits(credentials, session);
-      if ((data?.stat || "").toLowerCase() === "ok" && data?.data) {
-        const d = data.data;
-        setFunds({
-          available: d.net || d.cashAvailable || "--",
-          used: d.utilizedAmount || d.marginUsed || "--",
-          collateral: d.collateral || "--",
-        });
+      if ((data?.stat || "").toLowerCase() === "ok") {
+        const d = Array.isArray(data?.data) ? data.data[0] : data?.data;
+        if (d) {
+          setFunds({
+            available: d.net || d.cashAvailableForTrading || d.cashAvailable || d.availableMargin || d.availCash || "--",
+            used: d.utilizedAmount || d.marginUsed || d.usedMargin || d.boUsedMargin || d.utilisedAmount || "--",
+            collateral: d.collateral || d.collateralValue || d.collateralAmt || "--",
+          });
+        }
       }
     } catch {}
     setFundsLoading(false);
