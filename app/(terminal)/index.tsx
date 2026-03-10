@@ -2,9 +2,9 @@ import React, { useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, Pressable, ScrollView,
   ActivityIndicator, Modal, TextInput, Platform, Alert,
-  TouchableOpacity,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
@@ -32,6 +32,7 @@ interface OrderSheetState {
 
 export default function ChainScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const {
     currentIndex, setCurrentIndex,
     spotPrices, expiries, selectedExpiry, setSelectedExpiry,
@@ -42,6 +43,7 @@ export default function ChainScreen() {
     session,
   } = useKotak();
 
+  const [selectedRow, setSelectedRow] = useState<ChainRow | null>(null);
   const [orderSheet, setOrderSheet] = useState<OrderSheetState>({
     visible: false, row: null, side: null, action: null, lots: "1",
   });
@@ -51,15 +53,34 @@ export default function ChainScreen() {
 
   const spot = spotPrices[currentIndex] || chain?.spotPrice || 0;
   const topPad = Platform.OS === "web" ? insets.top + 67 : insets.top;
-  const bottomPad = Platform.OS === "web" ? 84 : 0;
+
+  // Bottom: tab bar + action bar (72px) + safety gap
+  const ACTION_BAR_H = 72;
+  const listBottomPad = tabBarHeight + ACTION_BAR_H + 8;
+  // Web: account for web bottom inset too
+  const webExtra = Platform.OS === "web" ? 34 : 0;
+
+  function selectRow(row: ChainRow) {
+    Haptics.selectionAsync();
+    setSelectedRow((prev) => (prev?.strike === row.strike ? null : row));
+  }
 
   function openOrderSheet(row: ChainRow, side: "CE" | "PE", action: "B" | "S") {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setOrderSheet({ visible: true, row, side, action, lots: "1" });
   }
 
   function closeOrderSheet() {
     setOrderSheet({ visible: false, row: null, side: null, action: null, lots: "1" });
+  }
+
+  function handleActionBtn(side: "CE" | "PE", action: "B" | "S") {
+    if (!selectedRow) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert("Select a strike", "Tap any row in the chain to select a strike first.");
+      return;
+    }
+    openOrderSheet(selectedRow, side, action);
   }
 
   async function handlePlaceOrder() {
@@ -69,10 +90,9 @@ export default function ChainScreen() {
     const ts = side === "CE" ? row.ce_ts : row.pe_ts;
     const es = side === "CE" ? row.ce_seg : row.pe_seg;
     const lot = side === "CE" ? row.ce_lot : row.pe_lot;
-    if (!ts || !es) { Alert.alert("Error", "No instrument data"); return; }
+    if (!ts || !es) { Alert.alert("Error", "No instrument data for this strike"); return; }
     const qty = lotsNum * lot;
     setPlacing(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const result = await placeTradeOrder({ es, ts, tt: action, qty });
     setPlacing(false);
     closeOrderSheet();
@@ -93,6 +113,8 @@ export default function ChainScreen() {
     );
   }
 
+  const actionBarBottom = tabBarHeight + webExtra;
+
   return (
     <View style={[styles.container, { paddingTop: topPad }]}>
       {/* Header */}
@@ -107,11 +129,10 @@ export default function ChainScreen() {
             <Text style={styles.spotPrice}>{spot > 0 ? fmtPrice(spot) : "—"}</Text>
           </View>
           <Pressable style={styles.refreshBtn} onPress={refreshChain}>
-            {chainLoading ? (
-              <ActivityIndicator size="small" color={Colors.textSecondary} />
-            ) : (
-              <Feather name="refresh-cw" size={15} color={Colors.textSecondary} />
-            )}
+            {chainLoading
+              ? <ActivityIndicator size="small" color={Colors.textSecondary} />
+              : <Feather name="refresh-cw" size={15} color={Colors.textSecondary} />
+            }
           </Pressable>
         </View>
 
@@ -120,10 +141,7 @@ export default function ChainScreen() {
             <Pressable
               key={e.label}
               style={[styles.expiryChip, selectedExpiry === e.label && styles.expiryChipActive]}
-              onPress={() => {
-                Haptics.selectionAsync();
-                setSelectedExpiry(e.label);
-              }}
+              onPress={() => { Haptics.selectionAsync(); setSelectedExpiry(e.label); }}
             >
               <Text style={[styles.expiryText, selectedExpiry === e.label && styles.expiryTextActive]}>
                 {e.label}
@@ -134,17 +152,17 @@ export default function ChainScreen() {
         </ScrollView>
 
         <View style={styles.chainHeader}>
-          <Text style={[styles.colHeader, { textAlign: "right" }]}>CE</Text>
+          <Text style={[styles.colHeader, { textAlign: "left", paddingLeft: 12 }]}>CE</Text>
           <View style={styles.strikeHeaderBox}>
             <Pressable onPress={() => setShowStrikesPicker(true)}>
-              <Text style={styles.strikeHeaderText}>Strike ±{numStrikes}</Text>
+              <Text style={styles.strikeHeaderText}>STRIKE ±{numStrikes}</Text>
             </Pressable>
           </View>
-          <Text style={[styles.colHeader, { textAlign: "left" }]}>PE</Text>
+          <Text style={[styles.colHeader, { textAlign: "right", paddingRight: 12 }]}>PE</Text>
         </View>
       </View>
 
-      {/* Chain */}
+      {/* Chain list */}
       {chainLoading && !chain ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator color={Colors.green} size="large" />
@@ -173,44 +191,79 @@ export default function ChainScreen() {
         <View style={styles.loadingBox}>
           <Feather name="bar-chart-2" size={40} color={Colors.border2} />
           <Text style={styles.emptyText}>No chain data</Text>
-          <Text style={styles.emptySubText}>Tap refresh to retry</Text>
+          <Text style={styles.emptySubText}>Tap refresh or select an expiry</Text>
         </View>
       ) : (
         <FlatList
           data={chain.chain}
           keyExtractor={(item) => String(item.strike)}
-          contentContainerStyle={{ paddingBottom: bottomPad + 20 }}
+          contentContainerStyle={{ paddingBottom: listBottomPad }}
           initialScrollIndex={Math.floor(chain.chain.length / 2)}
-          getItemLayout={(_, index) => ({ length: 56, offset: 56 * index, index })}
+          getItemLayout={(_, index) => ({ length: 52, offset: 52 * index, index })}
           renderItem={({ item }) => (
             <ChainRowItem
               item={item}
               isAtm={item.isAtm}
-              onPressCe={(action) => openOrderSheet(item, "CE", action)}
-              onPressPe={(action) => openOrderSheet(item, "PE", action)}
+              isSelected={selectedRow?.strike === item.strike}
+              onPress={() => selectRow(item)}
             />
           )}
         />
       )}
 
-      {/* Index picker modal */}
+      {/* Fixed bottom action bar */}
+      <View style={[styles.actionBar, { bottom: actionBarBottom }]}>
+        <View style={styles.actionBarInfo}>
+          {selectedRow ? (
+            <>
+              <Text style={styles.actionBarStrike}>{fmtStrike(selectedRow.strike)}</Text>
+              <Text style={styles.actionBarExpiry}>{selectedExpiry}</Text>
+            </>
+          ) : (
+            <Text style={styles.actionBarHint}>↑  Tap a row to select strike</Text>
+          )}
+        </View>
+        <View style={styles.actionBtns}>
+          <Pressable
+            style={[styles.actionBtn, styles.buyCeBtn, !selectedRow && styles.actionBtnDisabled]}
+            onPress={() => handleActionBtn("CE", "B")}
+          >
+            <Text style={styles.actionBtnText}>B CE</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.actionBtn, styles.sellCeBtn, !selectedRow && styles.actionBtnDisabled]}
+            onPress={() => handleActionBtn("CE", "S")}
+          >
+            <Text style={styles.actionBtnText}>S CE</Text>
+          </Pressable>
+          <View style={styles.actionDivider} />
+          <Pressable
+            style={[styles.actionBtn, styles.buyPeBtn, !selectedRow && styles.actionBtnDisabled]}
+            onPress={() => handleActionBtn("PE", "B")}
+          >
+            <Text style={styles.actionBtnText}>B PE</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.actionBtn, styles.sellPeBtn, !selectedRow && styles.actionBtnDisabled]}
+            onPress={() => handleActionBtn("PE", "S")}
+          >
+            <Text style={styles.actionBtnText}>S PE</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Index picker */}
       <Modal visible={showIndexPicker} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowIndexPicker(false)}>
           <View style={styles.pickerCard}>
-            <Text style={styles.pickerTitle}>Select Index</Text>
+            <Text style={styles.pickerTitle}>SELECT INDEX</Text>
             {INDICES.map((idx) => (
               <Pressable
                 key={idx}
                 style={[styles.pickerItem, currentIndex === idx && styles.pickerItemActive]}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setCurrentIndex(idx);
-                  setShowIndexPicker(false);
-                }}
+                onPress={() => { Haptics.selectionAsync(); setCurrentIndex(idx); setShowIndexPicker(false); }}
               >
-                <Text style={[styles.pickerItemText, currentIndex === idx && styles.pickerItemTextActive]}>
-                  {idx}
-                </Text>
+                <Text style={[styles.pickerItemText, currentIndex === idx && styles.pickerItemTextActive]}>{idx}</Text>
                 {currentIndex === idx && <Feather name="check" size={16} color={Colors.green} />}
               </Pressable>
             ))}
@@ -222,20 +275,14 @@ export default function ChainScreen() {
       <Modal visible={showStrikesPicker} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowStrikesPicker(false)}>
           <View style={styles.pickerCard}>
-            <Text style={styles.pickerTitle}>Strikes on each side</Text>
-            {[3, 5, 7, 10].map((n) => (
+            <Text style={styles.pickerTitle}>STRIKES EACH SIDE</Text>
+            {[3, 5, 7, 10, 15].map((n) => (
               <Pressable
                 key={n}
                 style={[styles.pickerItem, numStrikes === n && styles.pickerItemActive]}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setNumStrikes(n);
-                  setShowStrikesPicker(false);
-                }}
+                onPress={() => { Haptics.selectionAsync(); setNumStrikes(n); setShowStrikesPicker(false); }}
               >
-                <Text style={[styles.pickerItemText, numStrikes === n && styles.pickerItemTextActive]}>
-                  ±{n} strikes
-                </Text>
+                <Text style={[styles.pickerItemText, numStrikes === n && styles.pickerItemTextActive]}>±{n} strikes</Text>
                 {numStrikes === n && <Feather name="check" size={16} color={Colors.green} />}
               </Pressable>
             ))}
@@ -243,20 +290,34 @@ export default function ChainScreen() {
         </Pressable>
       </Modal>
 
-      {/* Order sheet */}
+      {/* Order confirmation sheet */}
       <Modal visible={orderSheet.visible} transparent animationType="slide">
         <View style={styles.sheetOverlay}>
           <Pressable style={styles.sheetBackdrop} onPress={closeOrderSheet} />
           <View style={[styles.sheetCard, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>
-              {orderSheet.action === "B" ? "BUY" : "SELL"} {orderSheet.side}{" "}
-              {orderSheet.row ? fmtStrike(orderSheet.row.strike) : ""}
-            </Text>
-            <Text style={styles.sheetSymbol}>
-              {orderSheet.side === "CE" ? orderSheet.row?.ce_ts : orderSheet.row?.pe_ts}
-            </Text>
 
+            {/* Title row */}
+            <View style={styles.sheetTitleRow}>
+              <View style={[
+                styles.sheetActionBadge,
+                { backgroundColor: orderSheet.action === "B" ? Colors.green : Colors.red },
+              ]}>
+                <Text style={styles.sheetActionBadgeText}>
+                  {orderSheet.action === "B" ? "BUY" : "SELL"}
+                </Text>
+              </View>
+              <View>
+                <Text style={styles.sheetStrike}>
+                  {orderSheet.row ? fmtStrike(orderSheet.row.strike) : ""} {orderSheet.side}
+                </Text>
+                <Text style={styles.sheetSymbol}>
+                  {orderSheet.side === "CE" ? orderSheet.row?.ce_ts : orderSheet.row?.pe_ts}
+                </Text>
+              </View>
+            </View>
+
+            {/* Lots control */}
             <View style={styles.sheetLotsRow}>
               <Text style={styles.sheetLotsLabel}>Lots</Text>
               <View style={styles.sheetLotsControl}>
@@ -267,7 +328,7 @@ export default function ChainScreen() {
                     setOrderSheet((s) => ({ ...s, lots: String(v) }));
                   }}
                 >
-                  <Feather name="minus" size={18} color={Colors.text} />
+                  <Feather name="minus" size={20} color={Colors.text} />
                 </Pressable>
                 <TextInput
                   style={styles.lotsInput}
@@ -283,21 +344,25 @@ export default function ChainScreen() {
                     setOrderSheet((s) => ({ ...s, lots: String(v) }));
                   }}
                 >
-                  <Feather name="plus" size={18} color={Colors.text} />
+                  <Feather name="plus" size={20} color={Colors.text} />
                 </Pressable>
               </View>
             </View>
 
+            {/* Qty info */}
             <View style={styles.sheetQtyInfo}>
               <Text style={styles.sheetQtyText}>
-                {orderSheet.lots} lot × {orderSheet.side === "CE" ? orderSheet.row?.ce_lot : orderSheet.row?.pe_lot} = {" "}
+                {orderSheet.lots} lot{parseInt(orderSheet.lots || "1") !== 1 ? "s" : ""} ×{" "}
+                {orderSheet.side === "CE" ? orderSheet.row?.ce_lot : orderSheet.row?.pe_lot} ={" "}
                 <Text style={styles.sheetQtyBold}>
-                  {(parseInt(orderSheet.lots || "1") || 1) * (orderSheet.side === "CE" ? (orderSheet.row?.ce_lot || 1) : (orderSheet.row?.pe_lot || 1))} qty
+                  {(parseInt(orderSheet.lots || "1") || 1) *
+                    (orderSheet.side === "CE" ? (orderSheet.row?.ce_lot || 1) : (orderSheet.row?.pe_lot || 1))} qty
                 </Text>
               </Text>
-              <Text style={styles.sheetProdText}>Product: MIS · Type: MARKET</Text>
+              <Text style={styles.sheetProdText}>MIS · MARKET</Text>
             </View>
 
+            {/* Confirm / Cancel */}
             <View style={styles.sheetActions}>
               <Pressable style={styles.sheetCancelBtn} onPress={closeOrderSheet}>
                 <Text style={styles.sheetCancelText}>Cancel</Text>
@@ -311,13 +376,12 @@ export default function ChainScreen() {
                 onPress={handlePlaceOrder}
                 disabled={placing}
               >
-                {placing ? (
-                  <ActivityIndicator color={Colors.bg} size="small" />
-                ) : (
-                  <Text style={styles.sheetConfirmText}>
-                    {orderSheet.action === "B" ? "BUY" : "SELL"} NOW
-                  </Text>
-                )}
+                {placing
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.sheetConfirmText}>
+                      {orderSheet.action === "B" ? "BUY" : "SELL"} NOW
+                    </Text>
+                }
               </Pressable>
             </View>
           </View>
@@ -328,60 +392,58 @@ export default function ChainScreen() {
 }
 
 function ChainRowItem({
-  item, isAtm, onPressCe, onPressPe,
+  item, isAtm, isSelected, onPress,
 }: {
   item: ChainRow;
   isAtm: boolean;
-  onPressCe: (a: "B" | "S") => void;
-  onPressPe: (a: "B" | "S") => void;
+  isSelected: boolean;
+  onPress: () => void;
 }) {
+  const hasCe = !!item.ce_ts;
+  const hasPe = !!item.pe_ts;
+
   return (
-    <View style={[styles.chainRow, isAtm && styles.chainRowAtm]}>
-      {/* CE side — B and S buttons on the right, price on the left */}
+    <Pressable
+      style={[
+        styles.chainRow,
+        isAtm && styles.chainRowAtm,
+        isSelected && styles.chainRowSelected,
+      ]}
+      onPress={onPress}
+      android_ripple={{ color: `${Colors.blue}20` }}
+    >
+      {/* CE indicator */}
       <View style={styles.ceSide}>
-        {item.ce_ts ? (
-          <View style={styles.sideBtns}>
-            <TouchableOpacity style={styles.buyBtn} onPress={() => onPressCe("B")} activeOpacity={0.65}>
-              <Text style={styles.buyBtnText}>B</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.sellBtn} onPress={() => onPressCe("S")} activeOpacity={0.65}>
-              <Text style={styles.sellBtnText}>S</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.sideBtnsPlaceholder} />
-        )}
+        {hasCe
+          ? <View style={styles.ceBar} />
+          : <View style={styles.noInstrument} />
+        }
       </View>
 
       {/* Strike */}
-      <View style={[styles.strikeBadge, isAtm && styles.strikeBadgeAtm]}>
-        <Text style={[styles.strikeText, isAtm && styles.strikeTextAtm]}>
+      <View style={[styles.strikeBadge, isAtm && styles.strikeBadgeAtm, isSelected && styles.strikeBadgeSelected]}>
+        <Text style={[styles.strikeText, isAtm && styles.strikeTextAtm, isSelected && styles.strikeTextSelected]}>
           {fmtStrike(item.strike)}
         </Text>
-        {isAtm && <Text style={styles.atmLabel}>ATM</Text>}
+        {isAtm && !isSelected && <Text style={styles.atmLabel}>ATM</Text>}
+        {isSelected && <Text style={styles.selectedLabel}>SELECTED</Text>}
       </View>
 
-      {/* PE side — B and S buttons on the left, price on the right */}
+      {/* PE indicator */}
       <View style={styles.peSide}>
-        {item.pe_ts ? (
-          <View style={styles.sideBtns}>
-            <TouchableOpacity style={styles.buyBtn} onPress={() => onPressPe("B")} activeOpacity={0.65}>
-              <Text style={styles.buyBtnText}>B</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.sellBtn} onPress={() => onPressPe("S")} activeOpacity={0.65}>
-              <Text style={styles.sellBtnText}>S</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.sideBtnsPlaceholder} />
-        )}
+        {hasPe
+          ? <View style={styles.peBar} />
+          : <View style={styles.noInstrument} />
+        }
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
+
+  // Header
   header: {
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -406,23 +468,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   indexText: { fontSize: 15, fontFamily: "Inter_700Bold", color: Colors.text },
-  spotBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    flex: 1,
-  },
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
+  spotBox: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+  liveDot: { width: 7, height: 7, borderRadius: 3.5 },
   spotPrice: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text },
   refreshBtn: { padding: 6 },
-  expiryRow: {
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-  },
+  expiryRow: { paddingHorizontal: 12, paddingBottom: 10 },
   expiryChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -435,21 +485,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: Colors.surface,
   },
-  expiryChipActive: {
-    backgroundColor: `${Colors.blue}20`,
-    borderColor: Colors.blue,
-  },
+  expiryChipActive: { backgroundColor: `${Colors.blue}20`, borderColor: Colors.blue },
   expiryText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
   expiryTextActive: { color: Colors.blue },
-  nearestDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: Colors.yellow,
-  },
+  nearestDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: Colors.yellow },
   chainHeader: {
     flexDirection: "row",
-    paddingHorizontal: 12,
     paddingVertical: 7,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
@@ -469,6 +510,8 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     letterSpacing: 0.5,
   },
+
+  // States
   loadingBox: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14 },
   loadingText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
   emptyText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textMuted },
@@ -483,94 +526,122 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   retryBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.bg },
-  statusText: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textMuted, marginTop: 8, textAlign: "center", paddingHorizontal: 24 },
+  statusText: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textMuted,
+    marginTop: 8,
+    textAlign: "center",
+    paddingHorizontal: 24,
+  },
+
+  // Chain row
   chainRow: {
     flexDirection: "row",
     alignItems: "center",
-    height: 56,
+    height: 52,
     borderBottomWidth: 1,
     borderBottomColor: `${Colors.border}80`,
   },
-  chainRowAtm: {
-    backgroundColor: `${Colors.blue}10`,
-    borderBottomColor: Colors.border,
+  chainRowAtm: { backgroundColor: `${Colors.blue}08` },
+  chainRowSelected: { backgroundColor: `${Colors.yellow}15` },
+  ceSide: { flex: 1, alignItems: "flex-end", paddingRight: 16 },
+  peSide: { flex: 1, alignItems: "flex-start", paddingLeft: 16 },
+  ceBar: {
+    width: 40,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: `${Colors.green}60`,
   },
-  ceSide: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingRight: 8,
-    gap: 6,
-    height: "100%",
+  peBar: {
+    width: 40,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: `${Colors.red}60`,
   },
-  peSide: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    paddingLeft: 8,
-    gap: 6,
-    height: "100%",
-  },
-  sideContextMenu: { backgroundColor: `${Colors.blue}10` },
-  cePrice: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.green,
-    minWidth: 48,
-    textAlign: "right",
-  },
-  pePrice: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.red,
-    minWidth: 48,
-  },
-  priceEmpty: { color: Colors.textMuted },
-  sideBtns: { flexDirection: "row", gap: 5 },
-  sideBtnsPlaceholder: { width: 76 },
-  buyBtn: {
-    backgroundColor: Colors.green,
-    borderRadius: 6,
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sellBtn: {
-    backgroundColor: Colors.red,
-    borderRadius: 6,
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  buyBtnText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#fff" },
-  sellBtnText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#fff" },
+  noInstrument: { width: 40, height: 6 },
   strikeBadge: {
     width: 96,
     alignItems: "center",
     justifyContent: "center",
-    gap: 1,
+    gap: 2,
+    paddingVertical: 4,
   },
   strikeBadgeAtm: {
     backgroundColor: `${Colors.blue}15`,
     borderRadius: 6,
-    paddingVertical: 3,
   },
-  strikeText: {
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    color: Colors.textSecondary,
+  strikeBadgeSelected: {
+    backgroundColor: `${Colors.yellow}25`,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: `${Colors.yellow}60`,
   },
+  strikeText: { fontSize: 13, fontFamily: "Inter_700Bold", color: Colors.textSecondary },
   strikeTextAtm: { color: Colors.blue },
-  atmLabel: {
-    fontSize: 9,
-    fontFamily: "Inter_700Bold",
-    color: Colors.blue,
-    letterSpacing: 0.5,
+  strikeTextSelected: { color: Colors.yellow },
+  atmLabel: { fontSize: 9, fontFamily: "Inter_700Bold", color: Colors.blue, letterSpacing: 0.5 },
+  selectedLabel: { fontSize: 9, fontFamily: "Inter_700Bold", color: Colors.yellow, letterSpacing: 0.5 },
+
+  // Fixed action bar
+  actionBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 72,
+    backgroundColor: Colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    gap: 10,
   },
+  actionBarInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  actionBarStrike: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: Colors.yellow,
+  },
+  actionBarExpiry: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  actionBarHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textMuted,
+  },
+  actionBtns: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  actionDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: Colors.border,
+  },
+  actionBtn: {
+    width: 52,
+    height: 44,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionBtnDisabled: { opacity: 0.35 },
+  buyCeBtn: { backgroundColor: Colors.green },
+  sellCeBtn: { backgroundColor: `${Colors.green}40`, borderWidth: 1, borderColor: Colors.green },
+  buyPeBtn: { backgroundColor: Colors.red },
+  sellPeBtn: { backgroundColor: `${Colors.red}40`, borderWidth: 1, borderColor: Colors.red },
+  actionBtnText: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#fff" },
+
+  // Pickers
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -586,10 +657,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   pickerTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: Colors.textMuted,
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     padding: 12,
     paddingBottom: 8,
   },
@@ -604,6 +675,8 @@ const styles = StyleSheet.create({
   pickerItemActive: { backgroundColor: `${Colors.green}15` },
   pickerItemText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.text },
   pickerItemTextActive: { color: Colors.green, fontFamily: "Inter_600SemiBold" },
+
+  // Order sheet
   sheetOverlay: { flex: 1, justifyContent: "flex-end" },
   sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
   sheetCard: {
@@ -623,17 +696,34 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginBottom: 4,
   },
-  sheetTitle: {
-    fontSize: 22,
+  sheetTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  sheetActionBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    minWidth: 64,
+    alignItems: "center",
+  },
+  sheetActionBadgeText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
+    letterSpacing: 1,
+  },
+  sheetStrike: {
+    fontSize: 20,
     fontFamily: "Inter_700Bold",
     color: Colors.text,
-    textAlign: "center",
   },
   sheetSymbol: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: Colors.textSecondary,
-    textAlign: "center",
+    marginTop: 2,
   },
   sheetLotsRow: {
     flexDirection: "row",
@@ -645,64 +735,50 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  sheetLotsLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: Colors.textSecondary,
-  },
-  sheetLotsControl: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
+  sheetLotsLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  sheetLotsControl: { flexDirection: "row", alignItems: "center", gap: 16 },
   lotsBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: Colors.surface3,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.border2,
   },
   lotsInput: {
-    width: 52,
-    textAlign: "center",
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: "Inter_700Bold",
     color: Colors.text,
-    borderBottomWidth: 2,
-    borderBottomColor: Colors.border2,
-    paddingVertical: 2,
+    minWidth: 48,
+    textAlign: "center",
   },
-  sheetQtyInfo: { alignItems: "center", gap: 4 },
+  sheetQtyInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 2,
+  },
   sheetQtyText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.textSecondary },
-  sheetQtyBold: { fontFamily: "Inter_700Bold", color: Colors.text },
-  sheetProdText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.textMuted },
+  sheetQtyBold: { fontFamily: "Inter_600SemiBold", color: Colors.text },
+  sheetProdText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textMuted },
   sheetActions: { flexDirection: "row", gap: 12 },
   sheetCancelBtn: {
     flex: 1,
-    paddingVertical: 16,
+    height: 52,
     borderRadius: 14,
-    alignItems: "center",
+    backgroundColor: Colors.bg2,
     borderWidth: 1,
-    borderColor: Colors.border2,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  sheetCancelText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.textSecondary,
-  },
+  sheetCancelText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textSecondary },
   sheetConfirmBtn: {
     flex: 2,
-    paddingVertical: 16,
+    height: 52,
     borderRadius: 14,
     alignItems: "center",
+    justifyContent: "center",
   },
-  sheetConfirmText: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: Colors.bg,
-    letterSpacing: 1,
-  },
+  sheetConfirmText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: 0.5 },
 });
