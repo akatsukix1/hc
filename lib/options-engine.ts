@@ -203,7 +203,7 @@ export async function downloadAndBuildOptionsDb(
       db[key][label][strike][optType as "CE" | "PE"] = {
         ts,
         symbol: row.pSymbol || "",
-        seg: row.pExchSeg || "",
+        seg: (row.pExchSeg || "").toLowerCase(),   // Kotak order API expects lowercase
         lot,
       };
       if (expDate >= today) expiries[label] = expDate;

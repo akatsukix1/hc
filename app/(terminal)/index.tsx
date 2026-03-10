@@ -181,7 +181,7 @@ export default function ChainScreen() {
           keyExtractor={(item) => String(item.strike)}
           contentContainerStyle={{ paddingBottom: bottomPad + 20 }}
           initialScrollIndex={Math.floor(chain.chain.length / 2)}
-          getItemLayout={(_, index) => ({ length: 52, offset: 52 * index, index })}
+          getItemLayout={(_, index) => ({ length: 56, offset: 56 * index, index })}
           renderItem={({ item }) => (
             <ChainRowItem
               item={item}
@@ -337,19 +337,20 @@ function ChainRowItem({
 }) {
   return (
     <View style={[styles.chainRow, isAtm && styles.chainRowAtm]}>
-      {/* CE side */}
+      {/* CE side — B and S buttons on the right, price on the left */}
       <View style={styles.ceSide}>
-        <Text style={[styles.cePrice, styles.priceEmpty]}>—</Text>
         {item.ce_ts ? (
           <View style={styles.sideBtns}>
-            <TouchableOpacity style={styles.buyBtn} onPress={() => onPressCe("B")} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.buyBtn} onPress={() => onPressCe("B")} activeOpacity={0.65}>
               <Text style={styles.buyBtnText}>B</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.sellBtn} onPress={() => onPressCe("S")} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.sellBtn} onPress={() => onPressCe("S")} activeOpacity={0.65}>
               <Text style={styles.sellBtnText}>S</Text>
             </TouchableOpacity>
           </View>
-        ) : <View style={styles.sideBtnsPlaceholder} />}
+        ) : (
+          <View style={styles.sideBtnsPlaceholder} />
+        )}
       </View>
 
       {/* Strike */}
@@ -360,19 +361,20 @@ function ChainRowItem({
         {isAtm && <Text style={styles.atmLabel}>ATM</Text>}
       </View>
 
-      {/* PE side */}
+      {/* PE side — B and S buttons on the left, price on the right */}
       <View style={styles.peSide}>
         {item.pe_ts ? (
           <View style={styles.sideBtns}>
-            <TouchableOpacity style={styles.buyBtn} onPress={() => onPressPe("B")} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.buyBtn} onPress={() => onPressPe("B")} activeOpacity={0.65}>
               <Text style={styles.buyBtnText}>B</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.sellBtn} onPress={() => onPressPe("S")} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.sellBtn} onPress={() => onPressPe("S")} activeOpacity={0.65}>
               <Text style={styles.sellBtnText}>S</Text>
             </TouchableOpacity>
           </View>
-        ) : <View style={styles.sideBtnsPlaceholder} />}
-        <Text style={[styles.pePrice, styles.priceEmpty]}>—</Text>
+        ) : (
+          <View style={styles.sideBtnsPlaceholder} />
+        )}
       </View>
     </View>
   );
@@ -485,7 +487,7 @@ const styles = StyleSheet.create({
   chainRow: {
     flexDirection: "row",
     alignItems: "center",
-    height: 52,
+    height: 56,
     borderBottomWidth: 1,
     borderBottomColor: `${Colors.border}80`,
   },
@@ -526,30 +528,26 @@ const styles = StyleSheet.create({
     minWidth: 48,
   },
   priceEmpty: { color: Colors.textMuted },
-  sideBtns: { flexDirection: "row", gap: 4 },
-  sideBtnsPlaceholder: { width: 60 },
+  sideBtns: { flexDirection: "row", gap: 5 },
+  sideBtnsPlaceholder: { width: 76 },
   buyBtn: {
-    backgroundColor: `${Colors.green}20`,
-    borderWidth: 1,
-    borderColor: `${Colors.green}50`,
-    borderRadius: 5,
-    width: 26,
-    height: 26,
+    backgroundColor: Colors.green,
+    borderRadius: 6,
+    width: 34,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
   },
   sellBtn: {
-    backgroundColor: `${Colors.red}20`,
-    borderWidth: 1,
-    borderColor: `${Colors.red}50`,
-    borderRadius: 5,
-    width: 26,
-    height: 26,
+    backgroundColor: Colors.red,
+    borderRadius: 6,
+    width: 34,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
   },
-  buyBtnText: { fontSize: 11, fontFamily: "Inter_700Bold", color: Colors.green },
-  sellBtnText: { fontSize: 11, fontFamily: "Inter_700Bold", color: Colors.red },
+  buyBtnText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#fff" },
+  sellBtnText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#fff" },
   strikeBadge: {
     width: 96,
     alignItems: "center",
