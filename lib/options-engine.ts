@@ -143,7 +143,9 @@ export async function downloadAndBuildOptionsDb(
   }
   const csvTexts: Record<string, string> = {};
   for (const csvKey of needed) {
-    const url = paths.find((p) => p.includes(csvKey) && !p.includes("-v1"));
+    const url =
+      paths.find((p) => p.includes(csvKey) && !p.includes("-v1")) ||
+      paths.find((p) => p.includes(csvKey));
     if (!url) { onProgress?.(`No URL for ${csvKey}`); continue; }
     onProgress?.(`Downloading ${csvKey}...`);
     try {

@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import * as SecureStore from "expo-secure-store";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { KotakCredentials, KotakSession } from "@/lib/kotak-api";
 import {
   kotakLoginTotp,
@@ -259,11 +258,12 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
         return net !== 0;
       });
       if (!open.length) return;
-      const tokens = open.map((p) => ({
-        seg: p.exSeg || "nse_fo",
-        sym: p.trdSym || "",
-        tok: p.tok || "",
-      }));
+      const tokens = open.map((p) => {
+        const sym = p.trdSym || "";
+        const rawSeg = (p.exSeg || p.seg || "").toLowerCase();
+        const seg = rawSeg || (sym.startsWith("SENSEX") ? "bse_fo" : "nse_fo");
+        return { seg, sym, tok: p.tok || "" };
+      });
       const ltps = await fetchLtps(credentials, session, tokens);
       setLiveLtps((prev) => ({ ...prev, ...ltps }));
     };
