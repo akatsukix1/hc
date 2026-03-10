@@ -174,7 +174,8 @@ export async function downloadAndBuildOptionsDb(
       const instType = (row.pInstType || "").toUpperCase().trim();
       if (symName !== key) continue;
       if (!["CE", "PE"].includes(optType)) continue;
-      if (["NIFTY", "BANKNIFTY", "FINNIFTY"].includes(key) && instType !== "OPTIDX") continue;
+      const validInstTypes = key === "SENSEX" ? ["OPTIDX", "IO"] : ["OPTIDX"];
+      if (!validInstTypes.includes(instType)) continue;
       const strikeParts = parseFloat(row.dStrikePrice || "0");
       if (isNaN(strikeParts) || strikeParts <= 0) continue;
       const strikeNum = strikeParts / 100;

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState } from "react";
 import {
   View, Text, StyleSheet, FlatList, Pressable, ScrollView,
   ActivityIndicator, Modal, TextInput, Platform, Alert,
@@ -314,32 +314,22 @@ function ChainRowItem({
   onPressCe: (a: "B" | "S") => void;
   onPressPe: (a: "B" | "S") => void;
 }) {
-  const [ceLong, setCeLong] = useState(false);
-  const [peLong, setPeLong] = useState(false);
-
   return (
     <View style={[styles.chainRow, isAtm && styles.chainRowAtm]}>
       {/* CE side */}
-      <Pressable
-        style={[styles.ceSide, ceLong && styles.sideContextMenu]}
-        onPress={() => onPressCe("B")}
-        onLongPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onPressCe("S");
-        }}
-      >
-        <Text style={[styles.cePrice, !item.ce_ts && styles.priceEmpty]}>
-          {item.ce_ts ? "—" : "—"}
-        </Text>
-        <View style={styles.sideBtns}>
-          <TouchableOpacity style={styles.buyBtn} onPress={() => onPressCe("B")} activeOpacity={0.7}>
-            <Text style={styles.buyBtnText}>B</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.sellBtn} onPress={() => onPressCe("S")} activeOpacity={0.7}>
-            <Text style={styles.sellBtnText}>S</Text>
-          </TouchableOpacity>
-        </View>
-      </Pressable>
+      <View style={styles.ceSide}>
+        <Text style={[styles.cePrice, !item.ce_ts && styles.priceEmpty]}>—</Text>
+        {item.ce_ts ? (
+          <View style={styles.sideBtns}>
+            <TouchableOpacity style={styles.buyBtn} onPress={() => onPressCe("B")} activeOpacity={0.7}>
+              <Text style={styles.buyBtnText}>B</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.sellBtn} onPress={() => onPressCe("S")} activeOpacity={0.7}>
+              <Text style={styles.sellBtnText}>S</Text>
+            </TouchableOpacity>
+          </View>
+        ) : <View style={styles.sideBtnsPlaceholder} />}
+      </View>
 
       {/* Strike */}
       <View style={[styles.strikeBadge, isAtm && styles.strikeBadgeAtm]}>
@@ -350,26 +340,19 @@ function ChainRowItem({
       </View>
 
       {/* PE side */}
-      <Pressable
-        style={styles.peSide}
-        onPress={() => onPressPe("B")}
-        onLongPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onPressPe("S");
-        }}
-      >
-        <View style={styles.sideBtns}>
-          <TouchableOpacity style={styles.buyBtn} onPress={() => onPressPe("B")} activeOpacity={0.7}>
-            <Text style={styles.buyBtnText}>B</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.sellBtn} onPress={() => onPressPe("S")} activeOpacity={0.7}>
-            <Text style={styles.sellBtnText}>S</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={[styles.pePrice, !item.pe_ts && styles.priceEmpty]}>
-          {item.pe_ts ? "—" : "—"}
-        </Text>
-      </Pressable>
+      <View style={styles.peSide}>
+        {item.pe_ts ? (
+          <View style={styles.sideBtns}>
+            <TouchableOpacity style={styles.buyBtn} onPress={() => onPressPe("B")} activeOpacity={0.7}>
+              <Text style={styles.buyBtnText}>B</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.sellBtn} onPress={() => onPressPe("S")} activeOpacity={0.7}>
+              <Text style={styles.sellBtnText}>S</Text>
+            </TouchableOpacity>
+          </View>
+        ) : <View style={styles.sideBtnsPlaceholder} />}
+        <Text style={[styles.pePrice, !item.pe_ts && styles.priceEmpty]}>—</Text>
+      </View>
     </View>
   );
 }
@@ -511,6 +494,7 @@ const styles = StyleSheet.create({
   },
   priceEmpty: { color: Colors.textMuted },
   sideBtns: { flexDirection: "row", gap: 4 },
+  sideBtnsPlaceholder: { width: 60 },
   buyBtn: {
     backgroundColor: `${Colors.green}20`,
     borderWidth: 1,

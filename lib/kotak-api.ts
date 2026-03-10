@@ -1,6 +1,7 @@
 import { fetch } from "expo/fetch";
 
 const LOGIN_BASE = "https://mis.kotaksecurities.com";
+const FALLBACK_BASE = "https://gw-napi.kotaksecurities.com";
 
 export interface KotakCredentials {
   accessToken: string;
@@ -70,7 +71,7 @@ export async function kotakValidateMpin(
         session: {
           sessionToken: d.token,
           sessionSid: d.sid,
-          baseUrl: d.baseUrl || "",
+          baseUrl: (d.baseUrl || FALLBACK_BASE).replace(/\/$/, ""),
           greetingName: d.greetingName || "",
           loginTime: new Date().toISOString(),
         },
@@ -305,7 +306,8 @@ export async function closeAllPositions(
     const netQty = pos.netQty !== undefined ? parseInt(pos.netQty) : buyQ - sellQ;
     if (netQty === 0) continue;
     const ts = pos.trdSym || "";
-    const es = pos.seg || pos.exSeg || "nse_fo";
+    const rawSeg = (pos.seg || pos.exSeg || "").toLowerCase();
+    const es = rawSeg || (ts.startsWith("SENSEX") ? "bse_fo" : "nse_fo");
     if (!ts) continue;
     const tt: "B" | "S" = netQty > 0 ? "S" : "B";
     const qty = Math.abs(netQty);
