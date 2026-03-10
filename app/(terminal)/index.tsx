@@ -37,7 +37,7 @@ export default function ChainScreen() {
     spotPrices, expiries, selectedExpiry, setSelectedExpiry,
     numStrikes, setNumStrikes,
     chain, chainLoading, refreshChain,
-    instrumentsLoaded, instrumentsLoading, reloadInstruments,
+    instrumentsLoaded, instrumentsLoading, instrumentsStatus, reloadInstruments,
     placeTradeOrder,
     session,
   } = useKotak();
@@ -165,6 +165,9 @@ export default function ChainScreen() {
               : <Text style={styles.retryBtnText}>Download Instruments</Text>
             }
           </Pressable>
+          {!!instrumentsStatus && (
+            <Text style={styles.statusText}>{instrumentsStatus}</Text>
+          )}
         </View>
       ) : !chain || !chain.chain.length ? (
         <View style={styles.loadingBox}>
@@ -478,6 +481,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   retryBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.bg },
+  statusText: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textMuted, marginTop: 8, textAlign: "center", paddingHorizontal: 24 },
   chainRow: {
     flexDirection: "row",
     alignItems: "center",

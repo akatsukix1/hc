@@ -123,11 +123,22 @@ export async function downloadAndBuildOptionsDb(
     if (!url) { onProgress?.(`No URL for ${csvKey}`); continue; }
     onProgress?.(`Downloading ${csvKey}...`);
     try {
-      const res = await fetch(url, {
-        headers: { Authorization: creds.accessToken },
-      });
-      csvTexts[csvKey] = await res.text();
-      onProgress?.(`Parsing ${csvKey}...`);
+      let text = "";
+      const isKotakDomain = url.includes("kotaksecurities.com") || url.includes("gw-napi");
+      if (isKotakDomain) {
+        const r1 = await fetch(url, { headers: { Authorization: creds.accessToken } });
+        text = await r1.text();
+      }
+      if (!text || text.trim().startsWith("<") || !text.includes(",")) {
+        const r2 = await fetch(url);
+        text = await r2.text();
+      }
+      if (text && !text.trim().startsWith("<") && text.includes(",")) {
+        csvTexts[csvKey] = text;
+        onProgress?.(`Parsing ${csvKey}...`);
+      } else {
+        onProgress?.(`Bad response for ${csvKey}`);
+      }
     } catch (e: any) {
       onProgress?.(`Failed ${csvKey}: ${e?.message}`);
     }

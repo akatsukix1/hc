@@ -50,6 +50,7 @@ interface KotakContextValue {
   refreshChain: () => Promise<void>;
   instrumentsLoaded: boolean;
   instrumentsLoading: boolean;
+  instrumentsStatus: string;
   reloadInstruments: () => Promise<void>;
 
   positions: any[];
@@ -88,6 +89,7 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
 
   const [optionsDb, setOptionsDb] = useState<OptionsDb>({});
   const [instrumentsLoading, setInstrumentsLoading] = useState(false);
+  const [instrumentsStatus, setInstrumentsStatus] = useState("");
   const [currentIndex, setCurrentIndex] = useState("NIFTY");
   const [spotPrices, setSpotPrices] = useState<Record<string, number>>({});
   const [expiries, setExpiries] = useState<ExpiryInfo[]>([]);
@@ -157,16 +159,30 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
   }, [credentials]);
 
   const reloadInstruments = useCallback(async () => {
-    if (!session || !credentials) return;
+    if (!session || !credentials) {
+      setInstrumentsStatus("Not logged in");
+      return;
+    }
     setInstrumentsLoading(true);
+    setInstrumentsStatus("Starting download...");
     try {
       const db = await downloadAndBuildOptionsDb(
         credentials, session,
         ["NIFTY", "BANKNIFTY", "SENSEX"],
-        () => {}
+        (msg) => setInstrumentsStatus(msg)
       );
-      setOptionsDb(db);
-    } catch {}
+      const totalSymbols = Object.values(db).reduce((sum, idx) => {
+        return sum + Object.values(idx).reduce((s, exp) => s + Object.keys(exp).length, 0);
+      }, 0);
+      if (totalSymbols === 0) {
+        setInstrumentsStatus("Failed — no instruments parsed");
+      } else {
+        setInstrumentsStatus(`Loaded ${totalSymbols} strikes`);
+        setOptionsDb(db);
+      }
+    } catch (e: any) {
+      setInstrumentsStatus(`Error: ${e?.message ?? "unknown"}`);
+    }
     setInstrumentsLoading(false);
   }, [session, credentials]);
 
@@ -360,7 +376,7 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
       currentIndex, setCurrentIndex, spotPrices, expiries, selectedExpiry,
       setSelectedExpiry, numStrikes, setNumStrikes, chain, chainLoading, refreshChain,
       instrumentsLoaded: Object.keys(optionsDb).some((k) => Object.keys(optionsDb[k]).length > 0),
-      instrumentsLoading, reloadInstruments,
+      instrumentsLoading, instrumentsStatus, reloadInstruments,
       positions, posLoading, liveLtps, refreshPositions,
       orders, ordersLoading, refreshOrders,
       funds, fundsLoading, refreshFunds,
