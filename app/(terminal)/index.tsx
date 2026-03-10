@@ -318,9 +318,7 @@ function ChainRowItem({
     <View style={[styles.chainRow, isAtm && styles.chainRowAtm]}>
       {/* CE side */}
       <View style={styles.ceSide}>
-        <Text style={[styles.cePrice, !item.ce_ltp && styles.priceEmpty]}>
-          {fmtPrice(item.ce_ltp)}
-        </Text>
+        <Text style={[styles.cePrice, styles.priceEmpty]}>—</Text>
         {item.ce_ts ? (
           <View style={styles.sideBtns}>
             <TouchableOpacity style={styles.buyBtn} onPress={() => onPressCe("B")} activeOpacity={0.7}>
@@ -353,9 +351,7 @@ function ChainRowItem({
             </TouchableOpacity>
           </View>
         ) : <View style={styles.sideBtnsPlaceholder} />}
-        <Text style={[styles.pePrice, !item.pe_ltp && styles.priceEmpty]}>
-          {fmtPrice(item.pe_ltp)}
-        </Text>
+        <Text style={[styles.pePrice, styles.priceEmpty]}>—</Text>
       </View>
     </View>
   );

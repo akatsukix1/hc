@@ -3,6 +3,11 @@ import { fetch } from "expo/fetch";
 const LOGIN_BASE = "https://mis.kotaksecurities.com";
 const FALLBACK_BASE = "https://gw-napi.kotaksecurities.com";
 
+const HARDCODED_CSV_URLS: Record<string, string> = {
+  nse_fo: "https://gw-napi.kotaksecurities.com/Files/1.0/masterscrip/nse_fo.csv",
+  bse_fo: "https://gw-napi.kotaksecurities.com/Files/1.0/masterscrip/bse_fo.csv",
+};
+
 export interface KotakCredentials {
   accessToken: string;
   mobileNumber: string;
@@ -115,10 +120,17 @@ export async function fetchScripPaths(creds: KotakCredentials, session: KotakSes
       headers: quoteHeaders(creds),
     });
     const data = await res.json();
-    return data?.data?.filesPaths || [];
-  } catch {
-    return [];
-  }
+    const paths =
+      data?.data?.filesPaths ||
+      data?.data?.filePaths ||
+      data?.data?.files ||
+      (Array.isArray(data?.data) ? data.data : null) ||
+      data?.filesPaths ||
+      data?.filePaths ||
+      [];
+    if (Array.isArray(paths) && paths.length > 0) return paths;
+  } catch {}
+  return Object.values(HARDCODED_CSV_URLS);
 }
 
 export async function fetchQuote(

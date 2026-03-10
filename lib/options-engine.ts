@@ -15,43 +15,17 @@ function formatExpiryLabel(d: Date): string {
 
 function parseExpiryFromSymbol(ts: string, prefix: string): Date | null {
   const rest = ts.slice(prefix.length);
-  const monthly = rest.match(/^(\d{2})([A-Z]{3})/);
-  if (monthly) {
-    const day = parseInt(monthly[1]);
-    const month = MONTHS[monthly[2]];
-    if (month && day >= 1 && day <= 31) {
-      const now = new Date();
-      for (const yr of [now.getFullYear(), now.getFullYear() + 1, now.getFullYear() - 1]) {
-        try {
-          const d = new Date(yr, month - 1, day);
-          if (yr >= 2025 && d.getDate() === day) return d;
-        } catch {}
-      }
+  // Kotak format: YY + MMM + DD + strike + opttype
+  // e.g. NIFTY26MAR1324000CE → rest = "26MAR1324000CE" → year=2026, month=MAR, day=13
+  const m = rest.match(/^(\d{2})([A-Z]{3})(\d{2})/);
+  if (m) {
+    const year = 2000 + parseInt(m[1]);
+    const month = MONTHS[m[2]];
+    const day = parseInt(m[3]);
+    if (month && year >= 2025 && year <= 2035 && day >= 1 && day <= 31) {
+      const d = new Date(year, month - 1, day);
+      if (d.getDate() === day) return d;
     }
-  }
-  if (rest.length >= 5) {
-    try {
-      const yrVal = parseInt(rest.slice(0, 2));
-      const year = 2000 + yrVal;
-      if (year < 2025 || year > 2030) return null;
-      const remaining = rest.slice(2);
-      if (remaining.length >= 4) {
-        const m2 = parseInt(remaining.slice(0, 2));
-        const d2 = parseInt(remaining.slice(2, 4));
-        if (m2 >= 10 && m2 <= 12 && d2 >= 1 && d2 <= 31) {
-          const dt = new Date(year, m2 - 1, d2);
-          if (dt.getDate() === d2) return dt;
-        }
-      }
-      if (remaining.length >= 3) {
-        const m1 = parseInt(remaining[0]);
-        const d1 = parseInt(remaining.slice(1, 3));
-        if (m1 >= 1 && m1 <= 9 && d1 >= 1 && d1 <= 31) {
-          const dt = new Date(year, m1 - 1, d1);
-          if (dt.getDate() === d1) return dt;
-        }
-      }
-    } catch {}
   }
   return null;
 }
@@ -112,12 +86,10 @@ export interface ChainRow {
   ce_symbol: string;
   ce_seg: string;
   ce_lot: number;
-  ce_ltp: number;
   pe_ts: string;
   pe_symbol: string;
   pe_seg: string;
   pe_lot: number;
-  pe_ltp: number;
 }
 
 export interface ChainResult {
@@ -256,12 +228,10 @@ export function queryChain(
       ce_symbol: ce?.symbol || "",
       ce_seg: ce?.seg || "",
       ce_lot: ce?.lot || 1,
-      ce_ltp: 0,
       pe_ts: pe?.ts || "",
       pe_symbol: pe?.symbol || "",
       pe_seg: pe?.seg || "",
       pe_lot: pe?.lot || 1,
-      pe_ltp: 0,
     };
   });
   return { atmStrike: atm, spotPrice, chain, index: key, expiry: expiryLabel, lotSize, step };

@@ -183,22 +183,7 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
       const expiry = selectedExpiry || expiries[0]?.label || "";
       if (!expiry) { setChainLoading(false); return; }
       const result = queryChain(optionsDb, currentIndex, spot || spotPrices[currentIndex] || 0, numStrikes, expiry);
-      if (result && result.chain.length > 0) {
-        const tokens: Array<{ seg: string; sym: string; tok: string }> = [];
-        for (const row of result.chain) {
-          if (row.ce_ts) tokens.push({ seg: row.ce_seg, sym: row.ce_ts, tok: "" });
-          if (row.pe_ts) tokens.push({ seg: row.pe_seg, sym: row.pe_ts, tok: "" });
-        }
-        const ltps = await fetchLtps(credentials, session, tokens);
-        const chainWithLtps = result.chain.map((row) => ({
-          ...row,
-          ce_ltp: ltps[row.ce_ts] || 0,
-          pe_ltp: ltps[row.pe_ts] || 0,
-        }));
-        setChain({ ...result, chain: chainWithLtps });
-      } else {
-        setChain(result);
-      }
+      setChain(result);
     } catch {}
     setChainLoading(false);
   }, [session, credentials, currentIndex, selectedExpiry, expiries, optionsDb, numStrikes, spotPrices]);
@@ -225,31 +210,12 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!session || !credentials) return;
-    const update = async () => {
-      const exp = selectedExpiry || expiries[0]?.label || "";
-      if (!exp) return;
-      const spot = spotPrices[currentIndex];
-      if (!spot) return;
-      const result = queryChain(optionsDb, currentIndex, spot, numStrikes, exp);
-      if (result) {
-        setChain((prev) => {
-          const ltpMap: Record<string, number> = {};
-          if (prev) {
-            for (const row of prev.chain) {
-              if (row.ce_ts) ltpMap[row.ce_ts] = row.ce_ltp;
-              if (row.pe_ts) ltpMap[row.pe_ts] = row.pe_ltp;
-            }
-          }
-          const chainWithLtps = result.chain.map((row) => ({
-            ...row,
-            ce_ltp: ltpMap[row.ce_ts] || 0,
-            pe_ltp: ltpMap[row.pe_ts] || 0,
-          }));
-          return { ...result, chain: chainWithLtps };
-        });
-      }
-    };
-    update();
+    const exp = selectedExpiry || expiries[0]?.label || "";
+    if (!exp) return;
+    const spot = spotPrices[currentIndex];
+    if (!spot) return;
+    const result = queryChain(optionsDb, currentIndex, spot, numStrikes, exp);
+    if (result) setChain(result);
   }, [spotPrices, currentIndex]);
 
   const refreshPositions = useCallback(async () => {
