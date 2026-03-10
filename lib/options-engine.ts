@@ -13,20 +13,42 @@ function formatExpiryLabel(d: Date): string {
   return `${String(d.getDate()).padStart(2, "0")}-${MONTH_LABELS[d.getMonth()]}-${d.getFullYear()}`;
 }
 
-function parseExpiryFromSymbol(ts: string, prefix: string): Date | null {
+// Parses expiry date AND strike price from the trading symbol.
+// Monthly format: NIFTY26MAR1024000CE → year=2026, month=3, day=10, strike=24000
+// Weekly format:  NIFTY2631224000CE   → year=2026, month=3,  day=12, strike=24000
+//                 (month digit: 1-9, A=10, B=11, C=12)
+function parseSymbolData(ts: string, prefix: string): { expDate: Date; strike: number } | null {
   const rest = ts.slice(prefix.length);
-  // Kotak format: YY + MMM + DD + strike + opttype
-  // e.g. NIFTY26MAR1324000CE → rest = "26MAR1324000CE" → year=2026, month=MAR, day=13
-  const m = rest.match(/^(\d{2})([A-Z]{3})(\d{2})/);
-  if (m) {
-    const year = 2000 + parseInt(m[1]);
-    const month = MONTHS[m[2]];
-    const day = parseInt(m[3]);
-    if (month && year >= 2025 && year <= 2035 && day >= 1 && day <= 31) {
+
+  // Monthly: YY + [A-Z]{3} + DD + digits + CE/PE
+  const monthly = rest.match(/^(\d{2})([A-Z]{3})(\d{2})(\d+)(CE|PE)$/i);
+  if (monthly) {
+    const year = 2000 + parseInt(monthly[1]);
+    const month = MONTHS[monthly[2].toUpperCase()];
+    const day = parseInt(monthly[3]);
+    const strike = parseInt(monthly[4]);
+    if (month && year >= 2025 && year <= 2035 && day >= 1 && day <= 31 && strike > 100) {
       const d = new Date(year, month - 1, day);
-      if (d.getDate() === day) return d;
+      if (d.getDate() === day) return { expDate: d, strike };
     }
   }
+
+  // Weekly: YY + single-char-month + DD + digits + CE/PE
+  const weekly = rest.match(/^(\d{2})([1-9ABC])(\d{2})(\d+)(CE|PE)$/i);
+  if (weekly) {
+    const year = 2000 + parseInt(weekly[1]);
+    const mChar = weekly[2].toUpperCase();
+    const month = "123456789".includes(mChar)
+      ? parseInt(mChar)
+      : ({ A: 10, B: 11, C: 12 } as Record<string, number>)[mChar] ?? 0;
+    const day = parseInt(weekly[3]);
+    const strike = parseInt(weekly[4]);
+    if (month >= 1 && month <= 12 && year >= 2025 && year <= 2035 && day >= 1 && day <= 31 && strike > 100) {
+      const d = new Date(year, month - 1, day);
+      if (d.getDate() === day) return { expDate: d, strike };
+    }
+  }
+
   return null;
 }
 
@@ -117,9 +139,10 @@ export async function downloadAndBuildOptionsDb(
   }
   const csvTexts: Record<string, string> = {};
   for (const csvKey of needed) {
+    const csvKeyU = csvKey.toUpperCase();
     const url =
-      paths.find((p) => p.includes(csvKey) && !p.includes("-v1")) ||
-      paths.find((p) => p.includes(csvKey));
+      paths.find((p) => p.toLowerCase().includes(csvKey) && !p.toLowerCase().includes("-v1")) ||
+      paths.find((p) => p.toUpperCase().includes(csvKeyU));
     if (!url) { onProgress?.(`No URL for ${csvKey}`); continue; }
     onProgress?.(`Downloading ${csvKey}...`);
     try {
@@ -143,7 +166,7 @@ export async function downloadAndBuildOptionsDb(
       onProgress?.(`Failed ${csvKey}: ${e?.message}`);
     }
   }
-  const neededCols = ["pSymbol","pExchSeg","pTrdSymbol","pOptionType","lLotSize","pSymbolName","pInstType","dStrikePrice"];
+  const neededCols = ["pSymbol","pExchSeg","pTrdSymbol","pOptionType","lLotSize","pSymbolName","pInstType"];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   for (const idx of indices) {
@@ -157,23 +180,27 @@ export async function downloadAndBuildOptionsDb(
     const expiries: Record<string, Date> = {};
     for (const row of rows) {
       const symName = (row.pSymbolName || "").toUpperCase().trim();
-      const optType = (row.pOptionType || "").trim();
+      const optType = (row.pOptionType || "").toUpperCase().trim();
       const instType = (row.pInstType || "").toUpperCase().trim();
       if (symName !== key) continue;
       if (!["CE", "PE"].includes(optType)) continue;
-      const validInstTypes = key === "SENSEX" ? ["OPTIDX", "IO"] : ["OPTIDX"];
-      if (!validInstTypes.includes(instType)) continue;
-      const strikeParts = parseFloat(row.dStrikePrice || "0");
-      if (isNaN(strikeParts) || strikeParts <= 0) continue;
-      const strikeNum = strikeParts / 100;
+      // SENSEX uses OPTIDX or IO; NIFTY/BANKNIFTY use OPTIDX
+      if (key === "SENSEX") {
+        if (!["OPTIDX", "IO", "OPTFUT"].includes(instType)) continue;
+      } else {
+        if (instType !== "OPTIDX") continue;
+      }
       const ts = (row.pTrdSymbol || "").toUpperCase().trim();
-      const expDate = parseExpiryFromSymbol(ts, key);
-      if (!expDate || expDate.getFullYear() > 2030) continue;
+      // Extract expiry date AND strike from the trading symbol (avoids any CSV column issues)
+      const parsed = parseSymbolData(ts, key);
+      if (!parsed || parsed.expDate.getFullYear() > 2030) continue;
+      const { expDate, strike } = parsed;
+      if (strike <= 0) continue;
       const label = formatExpiryLabel(expDate);
       const lot = parseInt(row.lLotSize || "1") || 1;
       if (!db[key][label]) db[key][label] = {};
-      if (!db[key][label][strikeNum]) db[key][label][strikeNum] = {};
-      db[key][label][strikeNum][optType as "CE" | "PE"] = {
+      if (!db[key][label][strike]) db[key][label][strike] = {};
+      db[key][label][strike][optType as "CE" | "PE"] = {
         ts,
         symbol: row.pSymbol || "",
         seg: row.pExchSeg || "",
@@ -181,7 +208,7 @@ export async function downloadAndBuildOptionsDb(
       };
       if (expDate >= today) expiries[label] = expDate;
     }
-    onProgress?.(`${key}: ${Object.keys(expiries).length} expiries loaded`);
+    onProgress?.(`${key}: ${Object.keys(expiries).length} expiries, ${Object.keys(db[key]).length} total`);
   }
   return db;
 }

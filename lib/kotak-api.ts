@@ -275,12 +275,31 @@ export async function getLimits(
   creds: KotakCredentials,
   session: KotakSession
 ): Promise<any> {
+  const endpoints = [
+    { url: `${session.baseUrl}/quick/user/limits`, body: `jData=${encodeURIComponent(JSON.stringify({ seg: "ALL", exch: "ALL", prod: "ALL" }))}` },
+    { url: `${session.baseUrl}/quick/user/limits`, body: `jData=${encodeURIComponent(JSON.stringify({}))}` },
+    { url: `${session.baseUrl}/1.0/user/limits`, body: `jData=${encodeURIComponent(JSON.stringify({ seg: "ALL", exch: "ALL", prod: "ALL" }))}` },
+    { url: `${FALLBACK_BASE}/quick/user/limits`, body: `jData=${encodeURIComponent(JSON.stringify({ seg: "ALL", exch: "ALL", prod: "ALL" }))}` },
+  ];
+  for (const ep of endpoints) {
+    try {
+      const res = await fetch(ep.url, {
+        method: "POST",
+        headers: postHeaders(creds, session),
+        body: ep.body,
+      });
+      const data = await res.json();
+      // Accept any response that isn't a hard Not_Ok and has some data shape
+      if (data && data.stat !== "Not_Ok") return data;
+      // If it IS Not_Ok but has meaningful data (not just a "session expired" error), return it anyway for debugging
+      if (data?.data || data?.net || data?.cashAvlForTrade) return data;
+    } catch {}
+  }
+  // Last resort: try GET
   try {
-    const jData = JSON.stringify({ seg: "ALL", exch: "ALL", prod: "ALL" });
     const res = await fetch(`${session.baseUrl}/quick/user/limits`, {
-      method: "POST",
-      headers: postHeaders(creds, session),
-      body: `jData=${encodeURIComponent(jData)}`,
+      method: "GET",
+      headers: getHeaders(session),
     });
     return await res.json();
   } catch (e: any) {
