@@ -19,7 +19,7 @@ function fmtCurrency(v: string): string {
 
 export default function FundsScreen() {
   const insets = useSafeAreaInsets();
-  const { funds, fundsLoading, refreshFunds, session, disconnect, credentials } = useKotak();
+  const { funds, fundsLoading, fundsError, refreshFunds, session, disconnect, credentials } = useKotak();
 
   useEffect(() => {
     if (session) refreshFunds();
@@ -65,6 +65,12 @@ export default function FundsScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>MARGIN</Text>
+        {!!fundsError && (
+          <View style={styles.errorBox}>
+            <Feather name="alert-circle" size={13} color={Colors.red} />
+            <Text style={styles.errorText}>{fundsError}</Text>
+          </View>
+        )}
         <View style={styles.card}>
           <FundRow
             label="Available"
@@ -156,6 +162,23 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: Colors.textMuted,
     letterSpacing: 1.2,
+  },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: `${Colors.red}15`,
+    borderWidth: 1,
+    borderColor: `${Colors.red}30`,
+    borderRadius: 10,
+    padding: 12,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.red,
+    lineHeight: 18,
   },
   card: {
     backgroundColor: Colors.surface,

@@ -64,6 +64,7 @@ interface KotakContextValue {
 
   funds: { available: string; used: string; collateral: string };
   fundsLoading: boolean;
+  fundsError: string;
   refreshFunds: () => Promise<void>;
 
   placeTradeOrder: (params: {
@@ -107,6 +108,7 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
 
   const [funds, setFunds] = useState({ available: "--", used: "--", collateral: "--" });
   const [fundsLoading, setFundsLoading] = useState(false);
+  const [fundsError, setFundsError] = useState("");
 
   const spotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const posIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -321,19 +323,43 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
   const refreshFunds = useCallback(async () => {
     if (!session || !credentials) return;
     setFundsLoading(true);
+    setFundsError("");
     try {
       const data = await getLimits(credentials, session);
-      if ((data?.stat || "").toLowerCase() === "ok") {
-        const d = Array.isArray(data?.data) ? data.data[0] : data?.data;
-        if (d) {
-          setFunds({
-            available: d.net || d.cashAvailableForTrading || d.cashAvailable || d.availableMargin || d.availCash || "--",
-            used: d.utilizedAmount || d.marginUsed || d.usedMargin || d.boUsedMargin || d.utilisedAmount || "--",
-            collateral: d.collateral || d.collateralValue || d.collateralAmt || "--",
-          });
-        }
+      if (!data || data.stat === "Not_Ok") {
+        setFundsError(data?.emsg || "API returned error");
+        setFundsLoading(false);
+        return;
       }
-    } catch {}
+      const raw = Array.isArray(data?.data) ? data.data[0] : (data?.data ?? data);
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        const pick = (...keys: string[]) => {
+          for (const k of keys) {
+            const v = raw[k];
+            if (v !== undefined && v !== null && v !== "" && String(v) !== "0.00" && String(v) !== "0") {
+              return String(v);
+            }
+          }
+          for (const k of keys) {
+            const v = raw[k];
+            if (v !== undefined && v !== null && v !== "") return String(v);
+          }
+          return "--";
+        };
+        setFunds({
+          available: pick("cashAvlForTrade", "net", "cashBal", "cashAmt", "availableCash",
+            "cashAvailableForTrading", "cashAvailable", "availableMargin", "availCash"),
+          used: pick("utilisedAmt", "marginUsed", "utilizedAmount", "usedMargin",
+            "boUsedMargin", "utilisedAmount", "mUsed", "totalMarginUsed"),
+          collateral: pick("collateralAmt", "collateral", "collateralValue", "pledgedQty"),
+        });
+        setFundsError("");
+      } else {
+        setFundsError(`Unexpected response shape: ${JSON.stringify(data).slice(0, 120)}`);
+      }
+    } catch (e: any) {
+      setFundsError(`Request failed: ${e?.message ?? "unknown"}`);
+    }
     setFundsLoading(false);
   }, [session, credentials]);
 
@@ -379,7 +405,7 @@ export function KotakProvider({ children }: { children: React.ReactNode }) {
       instrumentsLoading, instrumentsStatus, reloadInstruments,
       positions, posLoading, liveLtps, refreshPositions,
       orders, ordersLoading, refreshOrders,
-      funds, fundsLoading, refreshFunds,
+      funds, fundsLoading, fundsError, refreshFunds,
       placeTradeOrder, cancelTradeOrder, closeAll,
     }}>
       {children}
